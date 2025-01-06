@@ -74,6 +74,7 @@ mutable struct SimulationState
     fulfilled_orders::Vector{Order}
     lost_sales::Dict{Tuple{Customer, Product}, Float64}
     total_costs::Float64
+    revenue::Float64
 end
 
 # Network creation functions
@@ -123,6 +124,7 @@ function initialize_state(network::SupplyChainNetwork)
         Order[],
         Order[],
         Dict{Tuple{Customer, Product}, Float64}(),
+        0.0,
         0.0
     )
     
@@ -229,19 +231,24 @@ function process_demand!(state::SimulationState)
         current_demand = demand.quantities[state.current_time]
         if current_demand > 0
             fulfilled = false
+            # Try to fulfill from any storage
             for storage in state.network.storages
                 if haskey(state.inventory, (storage, demand.product)) && 
                    state.inventory[(storage, demand.product)] >= current_demand
                     state.inventory[(storage, demand.product)] -= current_demand
+                    # Add revenue separately instead of subtracting from costs
+                    state.revenue += current_demand * demand.sales_price
                     fulfilled = true
                     break
                 end
             end
             
-            if fulfilled
-                # Calculate revenue from fulfilled demand
-                revenue = current_demand * demand.sales_price
-                state.total_costs += revenue  # Use total_costs to track revenue
+            if !fulfilled
+                # Track lost sales
+                key = (demand.customer, demand.product)
+                state.lost_sales[key] = get(state.lost_sales, key, 0.0) + current_demand
+                # Add lost sales cost
+                state.total_costs += current_demand * demand.lost_sales_cost
             end
         end
     end
@@ -382,10 +389,11 @@ function plot_service_level(state::SimulationState)
     
     # Calculate total and fulfilled demand
     for demand in state.network.demands
+        key = (demand.customer, demand.product)
         total = sum(demand.quantities)  # Total demand over the horizon
-        lost = get(state.lost_sales, (demand.customer, demand.product), 0.0)  # Total lost sales
-        total_demand[(demand.customer, demand.product)] = total
-        fulfilled_demand[(demand.customer, demand.product)] = total - lost  # Fulfilled = Total - Lost
+        lost = get(state.lost_sales, key, 0.0)  # Total lost sales
+        total_demand[key] = total
+        fulfilled_demand[key] = total - lost  # Fulfilled = Total - Lost
     end
     
     # Calculate service levels
@@ -417,9 +425,56 @@ function plot_service_level(state::SimulationState)
 end
 
 function plot_revenue(state::SimulationState)
-    revenue_by_day = zeros(state.network.horizon)
+    # Calculate daily revenues
+    daily_revenue = zeros(state.network.horizon)
+    daily_confidence = zeros(state.network.horizon)
     
-    # Calculate total revenue for each day
+    # Calculate revenue and confidence interval for each day
+    for t in 1:state.network.horizon
+        day_revenues = Float64[]  # Store all possible revenues for this day
+        
+        # Calculate all possible revenue outcomes for this day
+        for demand in state.network.demands
+            current_demand = demand.quantities[t]
+            if current_demand > 0
+                push!(day_revenues, current_demand * demand.sales_price)
+            end
+        end
+        
+        # Calculate daily revenue and its confidence interval
+        daily_revenue[t] = sum(day_revenues)
+        if length(day_revenues) > 0
+            se = std(day_revenues) / sqrt(length(day_revenues))
+            daily_confidence[t] = 1.96 * se
+        end
+    end
+    
+    # Create the plot
+    p = plot(
+        title="Daily Revenue Over Time",
+        xlabel="Time (days)",
+        ylabel="Daily Revenue (\$)",
+        legend=true
+    )
+    
+    # Plot main line with confidence intervals
+    plot!(p, 1:length(daily_revenue), daily_revenue, 
+        ribbon=daily_confidence,
+        label="Daily Revenue with 95% CI",
+        color=:blue,
+        linewidth=2,
+        fillalpha=0.3)
+    
+    return p, daily_confidence
+end
+
+function plot_cumulative_revenue(state::SimulationState, daily_confidence::Vector{Float64})
+    # Calculate daily revenues and cumulative revenue
+    daily_revenue = zeros(state.network.horizon)
+    cumulative_revenue = zeros(state.network.horizon)
+    cumulative_confidence = zeros(state.network.horizon)
+    
+    # Calculate revenue for each day
     for t in 1:state.network.horizon
         for demand in state.network.demands
             current_demand = demand.quantities[t]
@@ -434,47 +489,44 @@ function plot_revenue(state::SimulationState)
                 end
                 
                 if fulfilled
-                    revenue_by_day[t] += current_demand * demand.sales_price
+                    daily_revenue[t] += current_demand * demand.sales_price
                 end
             end
         end
     end
     
-    # Calculate moving average and standard deviation
-    window = 7  # 7-day moving average
-    ma = zeros(length(revenue_by_day))
-    std_dev = zeros(length(revenue_by_day))
+    # Calculate cumulative revenue and confidence intervals
+    cumulative_revenue[1] = daily_revenue[1]
+    cumulative_confidence[1] = daily_confidence[1]
     
-    for t in window:length(revenue_by_day)
-        window_data = revenue_by_day[t-window+1:t]
-        ma[t] = mean(window_data)
-        std_dev[t] = std(window_data)
+    for t in 2:state.network.horizon
+        cumulative_revenue[t] = cumulative_revenue[t-1] + daily_revenue[t]
+        # Sum up the confidence intervals
+        cumulative_confidence[t] = sum(daily_confidence[1:t])  # Direct sum for cumulative CI
     end
     
-    # Fill in the start of the arrays
-    ma[1:window-1] .= ma[window]
-    std_dev[1:window-1] .= std_dev[window]
-    
-    # Create line plot
+    # Create the plot
     p = plot(
-        title="Total Revenue Over Time",
+        title="Cumulative Revenue Over Time",
         xlabel="Time (days)",
-        ylabel="Total Revenue (\$)",
-        legend=false
+        ylabel="Cumulative Revenue (\$)",
+        legend=true
     )
     
-    # Plot with confidence intervals
-    plot!(p, 1:length(revenue_by_day), ma, 
-        ribbon=1.96*std_dev,  # 95% confidence interval
+    # Plot main line with confidence intervals
+    plot!(p, 1:length(cumulative_revenue), cumulative_revenue, 
+        ribbon=cumulative_confidence,
+        label="Cumulative Revenue with 95% CI",
         color=:blue,
-        alpha=0.3)  # transparency for the confidence interval
+        linewidth=2,
+        fillalpha=0.3)
     
     return p
 end
 
 # Create simulation instance
 function run_simulation()
-    # Create products
+    # Create products with original prices
     smart_thermostat = Product("Smart Thermostat", 200.0)
     security_camera = Product("Security Camera", 150.0)
     smart_lighting = Product("Smart Lighting", 100.0)
@@ -538,27 +590,27 @@ function run_simulation()
 
     # Add demands to network with different patterns
     demands = [
-        # Smart Thermostat: Growing demand (20% per year) with seasonality
+        # Smart Thermostat
         Demand(eu_market, smart_thermostat, 
-            generate_seasonal_demand(horizon, base=50.0, amplitude=20.0, trend=20.0), 
-            200.0, 50.0),
+            generate_seasonal_demand(horizon, base=60.0, amplitude=20.0, trend=10.0), 
+            300.0, 20.0),
         
-        # Security Camera: Stable demand with moderate noise
+        # Security Camera
         Demand(us_market, security_camera,
-            generate_trending_demand(horizon, base=40.0, trend=0.0, noise_factor=0.15),
-            150.0, 40.0),
+            generate_trending_demand(horizon, base=50.0, trend=5.0, noise_factor=0.1),
+            250.0, 15.0),
         
-        # Smart Lighting: Declining demand (-10% per year) with minimal noise
+        # Smart Lighting
         Demand(asia_market, smart_lighting,
-            generate_trending_demand(horizon, base=60.0, trend=-10.0, noise_factor=0.05),
-            100.0, 30.0)
+            generate_trending_demand(horizon, base=70.0, trend=0.0, noise_factor=0.1),
+            200.0, 10.0)
     ]
 
     for demand in demands
         add_demand!(network, demand)
     end
 
-    # Define ordering policies
+    # Original ordering policies
     policies = Dict()
     for dc in [europe_dc, namerica_dc, asia_dc]
         for product in [smart_thermostat, security_camera, smart_lighting]
@@ -580,21 +632,23 @@ function run_simulation()
     p2 = plot_demand_patterns(final_state)
     p3 = plot_costs_breakdown(final_state)
     p4 = plot_service_level(final_state)
-    p5 = plot_revenue(final_state)
+    p5, daily_confidence = plot_revenue(final_state)
+    p6 = plot_cumulative_revenue(final_state, daily_confidence)
     
     # Save individual plots
-    savefig(p1, "C:\\Users\\Andrzej\\Desktop\\zms\\inventory_levels.png")
-    savefig(p2, "C:\\Users\\Andrzej\\Desktop\\zms\\demand_patterns.png")
-    savefig(p3, "C:\\Users\\Andrzej\\Desktop\\zms\\costs_breakdown.png")
-    savefig(p4, "C:\\Users\\Andrzej\\Desktop\\zms\\service_levels.png")
-    savefig(p5, "C:\\Users\\Andrzej\\Desktop\\zms\\revenue.png")
+    savefig(p1, ".\\plots\\inventory_levels.png")
+    savefig(p2, ".\\plots\\demand_patterns.png")
+    savefig(p3, ".\\plots\\costs_breakdown.png")
+    savefig(p4, ".\\plots\\service_levels.png")
+    savefig(p5, ".\\plots\\revenue.png")
+    savefig(p6, ".\\plots\\cumulative_revenue.png")
     
     # Create and save combined plots
     combined_plot1 = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
-    combined_plot2 = plot(p5, layout=(1,1), size=(1200,400))
+    combined_plot2 = plot(p5, p6, layout=(2,1), size=(1200,800))
     
-    savefig(combined_plot1, "C:\\Users\\Andrzej\\Desktop\\zms\\supply_chain_analysis1.png")
-    savefig(combined_plot2, "C:\\Users\\Andrzej\\Desktop\\zms\\supply_chain_analysis2.png")
+    savefig(combined_plot1, ".\\plots\\supply_chain_analysis1.png")
+    savefig(combined_plot2, ".\\plots\\supply_chain_analysis2.png")
     
     display(combined_plot1)
     display(combined_plot2)
