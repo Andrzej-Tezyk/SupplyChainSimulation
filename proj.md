@@ -1,14 +1,11 @@
 # Założenia projektu
 
 Celem naszego projektu jest stworzenie narzędzia do modelowania wielookresowych, wieloproduktowych sieci dostaw w warunkach popytu i zmiennych czasów dostaw. Projekt opiera się na symulacji, które pozwoli na elastyczne modelowanie różnych scenariuszy sieci dostaw oraz testowanie strategii zarządzania zapasami w złożonych systemach logistycznych.
-Kluczowe założenia projektu:
-1.  Elastyczna struktura węzłów sieci dostaw
 Planujemy umożliwić modelowanie sieci zbudowanych z trzech typów węzłów:                          
 o  Producentów, gdzie realizowane są procesy przekształcania materiałów                       
 o  Dystrybutorów, które pełnią rolę centrów magazynowych i dystrybucyjnych.                                
 o  Rynków, gdzie klienci końcowi składają zamówienia, co umożliwia uwzględnienie popytu zewnętrznego w dowolnym punkcie sieci.                                
 
-Planujemy umożliwić integrację środowiska z pakietem ReinforcementLearning.jl. Dzięki temu możliwe będzie trenowanie agentów, którzy będą automatycznie podejmować decyzje o zamówieniach na podstawie dynamicznie zmieniających się warunków w sieci.
 
 
 
