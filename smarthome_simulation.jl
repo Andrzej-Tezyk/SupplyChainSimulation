@@ -177,8 +177,9 @@ function update_inventory!(state::SimulationState)
                 end
                 push!(state.inventory_history[(storage, product)], current_level)
                 
-                # Add holding costs
-                state.total_costs += current_level * storage.products[product]
+                # Add daily holding costs to total costs
+                daily_holding_cost = current_level * storage.products[product]
+                state.total_costs += daily_holding_cost
             end
         end
     end
@@ -237,9 +238,10 @@ function process_demand!(state::SimulationState)
                 end
             end
             
-            if !fulfilled
-                state.lost_sales[(demand.customer, demand.product)] = 
-                    get(state.lost_sales, (demand.customer, demand.product), 0.0) + current_demand
+            if fulfilled
+                # Calculate revenue from fulfilled demand
+                revenue = current_demand * demand.sales_price
+                state.total_costs += revenue  # Use total_costs to track revenue
             end
         end
     end
@@ -259,12 +261,30 @@ function simulate(network::SupplyChainNetwork, policies::Dict)
     return state
 end
 
-# Helper function for seasonal demand
-function generate_seasonal_demand(horizon::Int64; base::Float64=50.0, amplitude::Float64=20.0)
+# Helper functions for demand patterns
+function generate_seasonal_demand(horizon::Int64; 
+        base::Float64=50.0, 
+        amplitude::Float64=20.0, 
+        trend::Float64=0.0)  # trend is % increase per year
     demand = Float64[]
     for t in 1:horizon
         seasonal_factor = amplitude * sin(2π * t / 365)
-        daily_demand = base + seasonal_factor + rand(Poisson(10))
+        trend_factor = base * (trend/100) * (t/365)  # Convert yearly trend to daily
+        daily_demand = base + trend_factor + seasonal_factor + rand(Poisson(5))
+        push!(demand, max(0.0, daily_demand))
+    end
+    return demand
+end
+
+function generate_trending_demand(horizon::Int64;
+        base::Float64=50.0,
+        trend::Float64=0.0,  # trend is % increase per year
+        noise_factor::Float64=0.2)
+    demand = Float64[]
+    for t in 1:horizon
+        trend_factor = base * (trend/100) * (t/365)
+        noise = rand(Normal(0, base * noise_factor))
+        daily_demand = base + trend_factor + noise
         push!(demand, max(0.0, daily_demand))
     end
     return demand
@@ -314,26 +334,37 @@ end
 
 function plot_costs_breakdown(state::SimulationState)
     # Calculate different cost components
-    holding_costs = Dict{String, Float64}()
-    transportation_costs = Dict{String, Float64}()
-    lost_sales_costs = Dict{String, Float64}()
+    holding_costs = 0.0
+    lost_sales_costs = 0.0
+    transportation_costs = 0.0
     
+    # Calculate holding costs - daily accumulation
     for storage in state.network.storages
-        holding_costs[storage.name] = 0.0
         for product in state.network.products
-            if haskey(state.inventory, (storage, product))
-                holding_costs[storage.name] += state.inventory[(storage, product)] * 
-                    storage.products[product]
+            if haskey(state.inventory_history, (storage, product))
+                # Calculate holding cost for each day
+                for daily_inventory in state.inventory_history[(storage, product)]
+                    holding_costs += daily_inventory * storage.products[product]
+                end
             end
         end
     end
     
+    # Calculate lost sales costs
+    for ((customer, product), quantity) in state.lost_sales
+        for demand in state.network.demands
+            if demand.customer == customer && demand.product == product
+                lost_sales_costs += quantity * demand.lost_sales_cost
+                break
+            end
+        end
+    end
+    
+    # Transportation costs are what remains from total costs
+    transportation_costs = state.total_costs - holding_costs - lost_sales_costs
+    
     # Create bar plot for costs
-    costs_data = [
-        sum(values(holding_costs)),
-        sum(values(lost_sales_costs)),
-        state.total_costs - sum(values(holding_costs)) - sum(values(lost_sales_costs))
-    ]
+    costs_data = [holding_costs, lost_sales_costs, transportation_costs]
     
     p = bar(["Holding Costs", "Lost Sales Costs", "Transportation Costs"],
         costs_data,
@@ -351,10 +382,10 @@ function plot_service_level(state::SimulationState)
     
     # Calculate total and fulfilled demand
     for demand in state.network.demands
-        total = sum(demand.quantities)
-        lost = get(state.lost_sales, (demand.customer, demand.product), 0.0)
+        total = sum(demand.quantities)  # Total demand over the horizon
+        lost = get(state.lost_sales, (demand.customer, demand.product), 0.0)  # Total lost sales
         total_demand[(demand.customer, demand.product)] = total
-        fulfilled_demand[(demand.customer, demand.product)] = total - lost
+        fulfilled_demand[(demand.customer, demand.product)] = total - lost  # Fulfilled = Total - Lost
     end
     
     # Calculate service levels
@@ -364,17 +395,79 @@ function plot_service_level(state::SimulationState)
     for ((customer, product), total) in total_demand
         if total > 0
             fulfilled = fulfilled_demand[(customer, product)]
-            push!(service_levels, (fulfilled / total) * 100)
+            service_level = (fulfilled / total) * 100  # Convert to percentage
+            push!(service_levels, service_level)
             push!(labels, "$(customer.region)\n$(product.name)")
         end
     end
     
+    # Create bar plot
     p = bar(labels,
         service_levels,
         title="Service Levels by Market and Product",
         ylabel="Service Level (%)",
         legend=false,
         rotation=45)
+    
+    # Add value labels
+    annotate!(p, [(i, v + maximum(service_levels)*0.02, 
+        text("$(round(v, digits=1))%", 8)) for (i, v) in enumerate(service_levels)])
+    
+    return p
+end
+
+function plot_revenue(state::SimulationState)
+    revenue_by_day = zeros(state.network.horizon)
+    
+    # Calculate total revenue for each day
+    for t in 1:state.network.horizon
+        for demand in state.network.demands
+            current_demand = demand.quantities[t]
+            if current_demand > 0
+                fulfilled = false
+                for storage in state.network.storages
+                    if haskey(state.inventory, (storage, demand.product)) && 
+                       state.inventory[(storage, demand.product)] >= current_demand
+                        fulfilled = true
+                        break
+                    end
+                end
+                
+                if fulfilled
+                    revenue_by_day[t] += current_demand * demand.sales_price
+                end
+            end
+        end
+    end
+    
+    # Calculate moving average and standard deviation
+    window = 7  # 7-day moving average
+    ma = zeros(length(revenue_by_day))
+    std_dev = zeros(length(revenue_by_day))
+    
+    for t in window:length(revenue_by_day)
+        window_data = revenue_by_day[t-window+1:t]
+        ma[t] = mean(window_data)
+        std_dev[t] = std(window_data)
+    end
+    
+    # Fill in the start of the arrays
+    ma[1:window-1] .= ma[window]
+    std_dev[1:window-1] .= std_dev[window]
+    
+    # Create line plot
+    p = plot(
+        title="Total Revenue Over Time",
+        xlabel="Time (days)",
+        ylabel="Total Revenue (\$)",
+        legend=false
+    )
+    
+    # Plot with confidence intervals
+    plot!(p, 1:length(revenue_by_day), ma, 
+        ribbon=1.96*std_dev,  # 95% confidence interval
+        color=:blue,
+        alpha=0.3)  # transparency for the confidence interval
     
     return p
 end
@@ -443,11 +536,22 @@ function run_simulation()
         add_lane!(network, lane)
     end
 
-    # Add demands to network
+    # Add demands to network with different patterns
     demands = [
-        Demand(eu_market, smart_thermostat, generate_seasonal_demand(horizon, base=50.0, amplitude=30.0), 200.0, 50.0),
-        Demand(us_market, security_camera, rand(Poisson(40), horizon), 150.0, 40.0),
-        Demand(asia_market, smart_lighting, rand(Poisson(60), horizon), 100.0, 30.0)
+        # Smart Thermostat: Growing demand (20% per year) with seasonality
+        Demand(eu_market, smart_thermostat, 
+            generate_seasonal_demand(horizon, base=50.0, amplitude=20.0, trend=20.0), 
+            200.0, 50.0),
+        
+        # Security Camera: Stable demand with moderate noise
+        Demand(us_market, security_camera,
+            generate_trending_demand(horizon, base=40.0, trend=0.0, noise_factor=0.15),
+            150.0, 40.0),
+        
+        # Smart Lighting: Declining demand (-10% per year) with minimal noise
+        Demand(asia_market, smart_lighting,
+            generate_trending_demand(horizon, base=60.0, trend=-10.0, noise_factor=0.05),
+            100.0, 30.0)
     ]
 
     for demand in demands
@@ -476,11 +580,24 @@ function run_simulation()
     p2 = plot_demand_patterns(final_state)
     p3 = plot_costs_breakdown(final_state)
     p4 = plot_service_level(final_state)
+    p5 = plot_revenue(final_state)
     
-    # Combine plots into a single figure
-    combined_plot = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
-    display(combined_plot)
-    savefig(combined_plot, "supply_chain_analysis.png")
+    # Save individual plots
+    savefig(p1, "C:\\Users\\Andrzej\\Desktop\\zms\\inventory_levels.png")
+    savefig(p2, "C:\\Users\\Andrzej\\Desktop\\zms\\demand_patterns.png")
+    savefig(p3, "C:\\Users\\Andrzej\\Desktop\\zms\\costs_breakdown.png")
+    savefig(p4, "C:\\Users\\Andrzej\\Desktop\\zms\\service_levels.png")
+    savefig(p5, "C:\\Users\\Andrzej\\Desktop\\zms\\revenue.png")
+    
+    # Create and save combined plots
+    combined_plot1 = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
+    combined_plot2 = plot(p5, layout=(1,1), size=(1200,400))
+    
+    savefig(combined_plot1, "C:\\Users\\Andrzej\\Desktop\\zms\\supply_chain_analysis1.png")
+    savefig(combined_plot2, "C:\\Users\\Andrzej\\Desktop\\zms\\supply_chain_analysis2.png")
+    
+    display(combined_plot1)
+    display(combined_plot2)
     
     println("\nDetailed Cost Breakdown:")
     holding_costs = 0.0
