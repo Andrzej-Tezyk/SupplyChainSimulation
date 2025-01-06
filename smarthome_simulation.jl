@@ -1,4 +1,6 @@
 using Distributions
+using Plots
+using Statistics
 
 # Basic types and structures
 abstract type Node end
@@ -67,6 +69,7 @@ mutable struct SimulationState
     network::SupplyChainNetwork
     current_time::Int64
     inventory::Dict{Tuple{Storage, Product}, Float64}
+    inventory_history::Dict{Tuple{Storage, Product}, Vector{Float64}}
     pending_orders::Vector{Order}
     fulfilled_orders::Vector{Order}
     lost_sales::Dict{Tuple{Customer, Product}, Float64}
@@ -116,6 +119,7 @@ function initialize_state(network::SupplyChainNetwork)
         network,
         1,
         Dict{Tuple{Storage, Product}, Float64}(),
+        Dict{Tuple{Storage, Product}, Vector{Float64}}(),
         Order[],
         Order[],
         Dict{Tuple{Customer, Product}, Float64}(),
@@ -126,6 +130,7 @@ function initialize_state(network::SupplyChainNetwork)
     for storage in network.storages
         for (product, quantity) in storage.inventory
             state.inventory[(storage, product)] = quantity
+            state.inventory_history[(storage, product)] = Float64[quantity]
         end
     end
     
@@ -164,7 +169,16 @@ function update_inventory!(state::SimulationState)
     for storage in state.network.storages
         for product in state.network.products
             if haskey(state.inventory, (storage, product))
-                state.total_costs += state.inventory[(storage, product)] * storage.products[product]
+                current_level = state.inventory[(storage, product)]
+                
+                # Record inventory level in history
+                if !haskey(state.inventory_history, (storage, product))
+                    state.inventory_history[(storage, product)] = Float64[]
+                end
+                push!(state.inventory_history[(storage, product)], current_level)
+                
+                # Add holding costs
+                state.total_costs += current_level * storage.products[product]
             end
         end
     end
@@ -254,6 +268,115 @@ function generate_seasonal_demand(horizon::Int64; base::Float64=50.0, amplitude:
         push!(demand, max(0.0, daily_demand))
     end
     return demand
+end
+
+function plot_inventory_levels(state::SimulationState)
+    p = plot(
+        title="Inventory Levels Over Time",
+        xlabel="Time (days)",
+        ylabel="Inventory Level",
+        legend=:topright
+    )
+    
+    colors = [:blue, :red, :green]
+    styles = [:solid, :dash, :dot]
+    
+    for (i, storage) in enumerate(state.network.storages)
+        for (j, product) in enumerate(state.network.products)
+            if haskey(state.inventory_history, (storage, product))
+                history = state.inventory_history[(storage, product)]
+                plot!(p, 1:length(history), history,
+                    label="$(storage.name) - $(product.name)",
+                    color=colors[i],
+                    linestyle=styles[j])
+            end
+        end
+    end
+    
+    return p
+end
+
+function plot_demand_patterns(state::SimulationState)
+    p = plot(
+        title="Demand Patterns",
+        xlabel="Time (days)",
+        ylabel="Demand Quantity",
+        legend=:topright
+    )
+    
+    for demand in state.network.demands
+        plot!(p, 1:state.network.horizon, demand.quantities,
+            label="$(demand.customer.region) - $(demand.product.name)")
+    end
+    
+    return p
+end
+
+function plot_costs_breakdown(state::SimulationState)
+    # Calculate different cost components
+    holding_costs = Dict{String, Float64}()
+    transportation_costs = Dict{String, Float64}()
+    lost_sales_costs = Dict{String, Float64}()
+    
+    for storage in state.network.storages
+        holding_costs[storage.name] = 0.0
+        for product in state.network.products
+            if haskey(state.inventory, (storage, product))
+                holding_costs[storage.name] += state.inventory[(storage, product)] * 
+                    storage.products[product]
+            end
+        end
+    end
+    
+    # Create bar plot for costs
+    costs_data = [
+        sum(values(holding_costs)),
+        sum(values(lost_sales_costs)),
+        state.total_costs - sum(values(holding_costs)) - sum(values(lost_sales_costs))
+    ]
+    
+    p = bar(["Holding Costs", "Lost Sales Costs", "Transportation Costs"],
+        costs_data,
+        title="Cost Breakdown",
+        ylabel="Cost (\$)",
+        legend=false,
+        rotation=45)
+    
+    return p
+end
+
+function plot_service_level(state::SimulationState)
+    total_demand = Dict{Tuple{Customer, Product}, Float64}()
+    fulfilled_demand = Dict{Tuple{Customer, Product}, Float64}()
+    
+    # Calculate total and fulfilled demand
+    for demand in state.network.demands
+        total = sum(demand.quantities)
+        lost = get(state.lost_sales, (demand.customer, demand.product), 0.0)
+        total_demand[(demand.customer, demand.product)] = total
+        fulfilled_demand[(demand.customer, demand.product)] = total - lost
+    end
+    
+    # Calculate service levels
+    service_levels = []
+    labels = []
+    
+    for ((customer, product), total) in total_demand
+        if total > 0
+            fulfilled = fulfilled_demand[(customer, product)]
+            push!(service_levels, (fulfilled / total) * 100)
+            push!(labels, "$(customer.region)\n$(product.name)")
+        end
+    end
+    
+    p = bar(labels,
+        service_levels,
+        title="Service Levels by Market and Product",
+        ylabel="Service Level (%)",
+        legend=false,
+        rotation=45)
+    
+    return p
 end
 
 # Create simulation instance
@@ -347,6 +470,50 @@ function run_simulation()
     println("Total Lost Sales: ", sum(values(final_state.lost_sales)))
     println("Total Fulfilled Orders: ", length(final_state.fulfilled_orders))
     println("Total Costs: ", final_state.total_costs)
+    
+    # Create visualizations
+    p1 = plot_inventory_levels(final_state)
+    p2 = plot_demand_patterns(final_state)
+    p3 = plot_costs_breakdown(final_state)
+    p4 = plot_service_level(final_state)
+    
+    # Combine plots into a single figure
+    combined_plot = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
+    display(combined_plot)
+    savefig(combined_plot, "supply_chain_analysis.png")
+    
+    println("\nDetailed Cost Breakdown:")
+    holding_costs = 0.0
+    lost_sales_costs = 0.0
+    
+    # Calculate holding costs
+    for storage in final_state.network.storages
+        for product in final_state.network.products
+            if haskey(final_state.inventory_history, (storage, product))
+                storage_holding_cost = sum(final_state.inventory_history[(storage, product)]) * 
+                    storage.products[product]
+                holding_costs += storage_holding_cost
+                println("Holding costs for $(storage.name) - $(product.name): \$", round(storage_holding_cost, digits=2))
+            end
+        end
+    end
+    
+    # Calculate lost sales costs
+    for ((customer, product), quantity) in final_state.lost_sales
+        for demand in final_state.network.demands
+            if demand.customer == customer && demand.product == product
+                cost = quantity * demand.lost_sales_cost
+                lost_sales_costs += cost
+                println("Lost sales costs for $(customer.region) - $(product.name): \$", round(cost, digits=2))
+            end
+        end
+    end
+    
+    transportation_costs = final_state.total_costs - holding_costs - lost_sales_costs
+    
+    println("\nTotal Holding Costs: \$", round(holding_costs, digits=2))
+    println("Total Lost Sales Costs: \$", round(lost_sales_costs, digits=2))
+    println("Total Transportation Costs: \$", round(transportation_costs, digits=2))
     
     return final_state
 end
