@@ -36,10 +36,6 @@ SmartHome Innovations is a global provider of smart home technologies, specializ
 
 ### Distribution
 - Regional logistics hubs
-- Multi-channel distribution
-  - Retail stores
-  - Online sales
-  - Direct to developers
 
 ### Market Segments
 - **B2C**: Individual homeowners
