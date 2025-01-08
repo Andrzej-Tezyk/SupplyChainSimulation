@@ -524,170 +524,288 @@ function plot_cumulative_revenue(state::SimulationState, daily_confidence::Vecto
     return p
 end
 
-# Create simulation instance
-function run_simulation()
-    # Create products with original prices
-    smart_thermostat = Product("Smart Thermostat", 200.0)
-    security_camera = Product("Security Camera", 150.0)
-    smart_lighting = Product("Smart Lighting", 100.0)
-
-    # Create suppliers
-    usa_factory = Supplier("USA Factory", "USA")
-    asia_factory = Supplier("Asia Factory", "China")
-
-    # Create distribution centers
-    europe_dc = Storage("Europe DC", "Germany", 
-        Dict(smart_thermostat => 0.5, security_camera => 0.7, smart_lighting => 0.3),
-        Dict(smart_thermostat => 100.0, security_camera => 100.0, smart_lighting => 100.0))
-
-    namerica_dc = Storage("North America DC", "USA",
-        Dict(smart_thermostat => 0.5, security_camera => 0.7, smart_lighting => 0.3),
-        Dict(smart_thermostat => 100.0, security_camera => 100.0, smart_lighting => 100.0))
-
-    asia_dc = Storage("Asia Pacific DC", "Singapore",
-        Dict(smart_thermostat => 0.5, security_camera => 0.7, smart_lighting => 0.3),
-        Dict(smart_thermostat => 100.0, security_camera => 100.0, smart_lighting => 100.0))
-
-    # Create markets
-    eu_market = Customer("EU Market", "Europe")
-    us_market = Customer("US Market", "North America")
-    asia_market = Customer("Asia Market", "Asia")
-
-    # Initialize network
-    horizon = 365
-    network = create_network(horizon)
-
-    # Add components to network
-    for supplier in [usa_factory, asia_factory]
-        add_supplier!(network, supplier)
-    end
-
-    for dc in [europe_dc, namerica_dc, asia_dc]
-        add_storage!(network, dc)
-    end
-
-    for market in [eu_market, us_market, asia_market]
-        add_customer!(network, market)
-    end
-
-    for product in [smart_thermostat, security_camera, smart_lighting]
-        add_product!(network, product)
-    end
-
-    # Add transportation lanes
-    lanes = [
-        Lane(usa_factory, namerica_dc, 5, 1000.0, 10.0),
-        Lane(usa_factory, europe_dc, 15, 2000.0, 20.0),
-        Lane(usa_factory, asia_dc, 20, 2500.0, 25.0),
-        Lane(asia_factory, namerica_dc, 20, 2500.0, 25.0),
-        Lane(asia_factory, europe_dc, 25, 3000.0, 30.0),
-        Lane(asia_factory, asia_dc, 5, 1000.0, 10.0)
-    ]
-
-    for lane in lanes
-        add_lane!(network, lane)
-    end
-
-    # Add demands to network with different patterns
-    demands = [
-        # Smart Thermostat
-        Demand(eu_market, smart_thermostat, 
-            generate_seasonal_demand(horizon, base=60.0, amplitude=20.0, trend=10.0), 
-            300.0, 20.0),
-        
-        # Security Camera
-        Demand(us_market, security_camera,
-            generate_trending_demand(horizon, base=50.0, trend=5.0, noise_factor=0.1),
-            250.0, 15.0),
-        
-        # Smart Lighting
-        Demand(asia_market, smart_lighting,
-            generate_trending_demand(horizon, base=70.0, trend=0.0, noise_factor=0.1),
-            200.0, 10.0)
-    ]
-
-    for demand in demands
-        add_demand!(network, demand)
-    end
-
-    # Original ordering policies
-    policies = Dict()
-    for dc in [europe_dc, namerica_dc, asia_dc]
-        for product in [smart_thermostat, security_camera, smart_lighting]
-            policies[(dc, product)] = SSPolicy(50.0, 200.0)
-        end
-    end
-
-    # Run simulation
-    final_state = simulate(network, policies)
-
-    # Print results
-    println("Simulation Results:")
-    println("Total Lost Sales: ", sum(values(final_state.lost_sales)))
-    println("Total Fulfilled Orders: ", length(final_state.fulfilled_orders))
-    println("Total Costs: ", final_state.total_costs)
+struct SimulationParameters
+    # Product parameters
+    product_prices::Dict{String, Float64}  # Base prices for products
+    sales_prices_markup::Float64  # Markup percentage for sales prices
+    lost_sales_cost_ratio::Float64  # Ratio of lost sales cost to base price
     
-    # Create visualizations
-    p1 = plot_inventory_levels(final_state)
-    p2 = plot_demand_patterns(final_state)
-    p3 = plot_costs_breakdown(final_state)
-    p4 = plot_service_level(final_state)
-    p5, daily_confidence = plot_revenue(final_state)
-    p6 = plot_cumulative_revenue(final_state, daily_confidence)
+    # Inventory parameters
+    initial_inventory::Float64  # Initial inventory for each product
+    holding_cost_rates::Dict{String, Float64}  # Holding cost rates by product
     
-    # Save individual plots
-    savefig(p1, ".\\plots\\inventory_levels.png")
-    savefig(p2, ".\\plots\\demand_patterns.png")
-    savefig(p3, ".\\plots\\costs_breakdown.png")
-    savefig(p4, ".\\plots\\service_levels.png")
-    savefig(p5, ".\\plots\\revenue.png")
-    savefig(p6, ".\\plots\\cumulative_revenue.png")
+    # Ordering parameters
+    reorder_point::Float64  # s in (s,S) policy
+    order_up_to::Float64  # S in (s,S) policy
     
-    # Create and save combined plots
-    combined_plot1 = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
-    combined_plot2 = plot(p5, p6, layout=(2,1), size=(1200,800))
+    # Transportation parameters
+    transport_fixed_costs::Dict{String, Float64}  # Fixed costs by distance type
+    transport_unit_costs::Dict{String, Float64}  # Unit costs by distance type
+    transport_times::Dict{String, Int64}  # Transport times by distance type
     
-    savefig(combined_plot1, ".\\plots\\supply_chain_analysis1.png")
-    savefig(combined_plot2, ".\\plots\\supply_chain_analysis2.png")
-    
-    display(combined_plot1)
-    display(combined_plot2)
-    
-    println("\nDetailed Cost Breakdown:")
-    holding_costs = 0.0
-    lost_sales_costs = 0.0
-    
-    # Calculate holding costs
-    for storage in final_state.network.storages
-        for product in final_state.network.products
-            if haskey(final_state.inventory_history, (storage, product))
-                storage_holding_cost = sum(final_state.inventory_history[(storage, product)]) * 
-                    storage.products[product]
-                holding_costs += storage_holding_cost
-                println("Holding costs for $(storage.name) - $(product.name): \$", round(storage_holding_cost, digits=2))
-            end
-        end
-    end
-    
-    # Calculate lost sales costs
-    for ((customer, product), quantity) in final_state.lost_sales
-        for demand in final_state.network.demands
-            if demand.customer == customer && demand.product == product
-                cost = quantity * demand.lost_sales_cost
-                lost_sales_costs += cost
-                println("Lost sales costs for $(customer.region) - $(product.name): \$", round(cost, digits=2))
-            end
-        end
-    end
-    
-    transportation_costs = final_state.total_costs - holding_costs - lost_sales_costs
-    
-    println("\nTotal Holding Costs: \$", round(holding_costs, digits=2))
-    println("Total Lost Sales Costs: \$", round(lost_sales_costs, digits=2))
-    println("Total Transportation Costs: \$", round(transportation_costs, digits=2))
-    
-    return final_state
+    # Demand parameters
+    base_demand::Dict{String, Float64}  # Base demand by product
+    seasonal_amplitude::Float64  # Amplitude for seasonal patterns
+    trend_percentage::Float64  # Yearly trend percentage
+    noise_factor::Float64  # Noise factor for demand variation
 end
 
-# Run the simulation
-final_state = run_simulation() 
+# Default parameters
+function default_parameters()
+    SimulationParameters(
+        # Product parameters
+        Dict("Smart Thermostat" => 200.0, "Security Camera" => 150.0, "Smart Lighting" => 100.0),
+        1.5,  # 50% markup
+        0.1,  # 10% of base price for lost sales cost
+        
+        # Inventory parameters
+        100.0,  # Initial inventory
+        Dict("Smart Thermostat" => 0.5, "Security Camera" => 0.7, "Smart Lighting" => 0.3),
+        
+        # Ordering parameters
+        50.0,   # Reorder point
+        200.0,  # Order up to level
+        
+        # Transportation parameters
+        Dict("short" => 1000.0, "medium" => 2000.0, "long" => 2500.0),
+        Dict("short" => 10.0, "medium" => 20.0, "long" => 25.0),
+        Dict("short" => 5, "medium" => 15, "long" => 20),
+        
+        # Demand parameters
+        Dict("Smart Thermostat" => 60.0, "Security Camera" => 50.0, "Smart Lighting" => 70.0),
+        20.0,   # Seasonal amplitude
+        10.0,   # Trend percentage
+        0.1     # Noise factor
+    )
+end
+
+# Create parameter variations for each set
+function get_product_parameters_higher()
+    base = default_parameters()
+    return SimulationParameters(
+        Dict("Smart Thermostat" => 300.0, "Security Camera" => 225.0, "Smart Lighting" => 150.0),  # 50% higher
+        2.0,  # Higher markup (100% vs 50%)
+        0.15, # Higher lost sales cost ratio
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_product_parameters_lower()
+    base = default_parameters()
+    return SimulationParameters(
+        Dict("Smart Thermostat" => 100.0, "Security Camera" => 75.0, "Smart Lighting" => 50.0),  # 50% lower
+        1.25,  # Lower markup (25% vs 50%)
+        0.05,  # Lower lost sales cost ratio
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_inventory_parameters_higher()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        200.0,  # Double initial inventory
+        Dict("Smart Thermostat" => 0.75, "Security Camera" => 1.05, "Smart Lighting" => 0.45),  # 50% higher
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_inventory_parameters_lower()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        50.0,  # Half initial inventory
+        Dict("Smart Thermostat" => 0.25, "Security Camera" => 0.35, "Smart Lighting" => 0.15),  # 50% lower
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_ordering_parameters_higher()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        75.0,   # 50% higher reorder point
+        300.0,  # 50% higher order up to
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_ordering_parameters_lower()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        25.0,   # 50% lower reorder point
+        100.0,  # 50% lower order up to
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_transport_parameters_higher()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        Dict("short" => 1500.0, "medium" => 3000.0, "long" => 3750.0),  # 50% higher
+        Dict("short" => 15.0, "medium" => 30.0, "long" => 37.5),  # 50% higher
+        Dict("short" => 7, "medium" => 22, "long" => 30),  # 40% longer
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_transport_parameters_lower()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        Dict("short" => 500.0, "medium" => 1000.0, "long" => 1250.0),  # 50% lower
+        Dict("short" => 5.0, "medium" => 10.0, "long" => 12.5),  # 50% lower
+        Dict("short" => 3, "medium" => 10, "long" => 14),  # 30% faster
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_demand_parameters_higher()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        Dict("Smart Thermostat" => 90.0, "Security Camera" => 75.0, "Smart Lighting" => 105.0),  # 50% higher
+        30.0,   # 50% higher seasonal amplitude
+        15.0,   # 50% higher trend
+        0.15    # 50% higher noise
+    )
+end
+
+function get_demand_parameters_lower()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        Dict("Smart Thermostat" => 30.0, "Security Camera" => 25.0, "Smart Lighting" => 35.0),  # 50% lower
+        10.0,   # 50% lower seasonal amplitude
+        5.0,    # 50% lower trend
+        0.05    # 50% lower noise
+    )
+end
+
+# Run all sensitivity analyses
+function run_all_sensitivity_analyses()
+    # Create base case
+    println("Running base case simulation...")
+    run_simulation(default_parameters(), "./plots/base")
+    
+    # Run sensitivity analyses
+    sensitivity_cases = [
+        ("product_higher", get_product_parameters_higher()),
+        ("product_lower", get_product_parameters_lower()),
+        ("inventory_higher", get_inventory_parameters_higher()),
+        ("inventory_lower", get_inventory_parameters_lower()),
+        ("ordering_higher", get_ordering_parameters_higher()),
+        ("ordering_lower", get_ordering_parameters_lower()),
+        ("transport_higher", get_transport_parameters_higher()),
+        ("transport_lower", get_transport_parameters_lower()),
+        ("demand_higher", get_demand_parameters_higher()),
+        ("demand_lower", get_demand_parameters_lower())
+    ]
+    
+    for (case_name, params) in sensitivity_cases
+        println("Running sensitivity analysis for: ", case_name)
+        output_dir = "./plots/sens/$case_name"
+        run_simulation(params, output_dir)
+    end
+end
+
+# Run all analyses
+run_all_sensitivity_analyses() 
