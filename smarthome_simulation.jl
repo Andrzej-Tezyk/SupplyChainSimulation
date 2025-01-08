@@ -809,3 +809,171 @@ end
 
 # Run all analyses
 run_all_sensitivity_analyses() 
+
+# Modified run_simulation function
+function run_simulation(params::SimulationParameters=default_parameters(), output_dir::String="./plots/base")
+    # Create products with parameterized prices
+    smart_thermostat = Product("Smart Thermostat", params.product_prices["Smart Thermostat"])
+    security_camera = Product("Security Camera", params.product_prices["Security Camera"])
+    smart_lighting = Product("Smart Lighting", params.product_prices["Smart Lighting"])
+
+    # Create suppliers (unchanged)
+    usa_factory = Supplier("USA Factory", "USA")
+    asia_factory = Supplier("Asia Factory", "China")
+
+    # Create distribution centers with parameterized costs and inventory
+    europe_dc = Storage("Europe DC", "Germany", 
+        Dict(smart_thermostat => params.holding_cost_rates["Smart Thermostat"],
+             security_camera => params.holding_cost_rates["Security Camera"],
+             smart_lighting => params.holding_cost_rates["Smart Lighting"]),
+        Dict(smart_thermostat => params.initial_inventory,
+             security_camera => params.initial_inventory,
+             smart_lighting => params.initial_inventory))
+
+    namerica_dc = Storage("North America DC", "USA",
+        Dict(smart_thermostat => params.holding_cost_rates["Smart Thermostat"],
+             security_camera => params.holding_cost_rates["Security Camera"],
+             smart_lighting => params.holding_cost_rates["Smart Lighting"]),
+        Dict(smart_thermostat => params.initial_inventory,
+             security_camera => params.initial_inventory,
+             smart_lighting => params.initial_inventory))
+
+    asia_dc = Storage("Asia Pacific DC", "Singapore",
+        Dict(smart_thermostat => params.holding_cost_rates["Smart Thermostat"],
+             security_camera => params.holding_cost_rates["Security Camera"],
+             smart_lighting => params.holding_cost_rates["Smart Lighting"]),
+        Dict(smart_thermostat => params.initial_inventory,
+             security_camera => params.initial_inventory,
+             smart_lighting => params.initial_inventory))
+
+    # Create markets (unchanged)
+    eu_market = Customer("EU Market", "Europe")
+    us_market = Customer("US Market", "North America")
+    asia_market = Customer("Asia Market", "Asia")
+
+    # Initialize network
+    horizon = 365
+    network = create_network(horizon)
+
+    # Add components to network (unchanged)
+    for supplier in [usa_factory, asia_factory]
+        add_supplier!(network, supplier)
+    end
+
+    for dc in [europe_dc, namerica_dc, asia_dc]
+        add_storage!(network, dc)
+    end
+
+    for market in [eu_market, us_market, asia_market]
+        add_customer!(network, market)
+    end
+
+    for product in [smart_thermostat, security_camera, smart_lighting]
+        add_product!(network, product)
+    end
+
+    # Add transportation lanes with parameterized costs and times
+    lanes = [
+        Lane(usa_factory, namerica_dc, params.transport_times["short"], 
+             params.transport_fixed_costs["short"], params.transport_unit_costs["short"]),
+        Lane(usa_factory, europe_dc, params.transport_times["medium"],
+             params.transport_fixed_costs["medium"], params.transport_unit_costs["medium"]),
+        Lane(usa_factory, asia_dc, params.transport_times["long"],
+             params.transport_fixed_costs["long"], params.transport_unit_costs["long"]),
+        Lane(asia_factory, namerica_dc, params.transport_times["long"],
+             params.transport_fixed_costs["long"], params.transport_unit_costs["long"]),
+        Lane(asia_factory, europe_dc, params.transport_times["long"],
+             params.transport_fixed_costs["long"], params.transport_unit_costs["long"]),
+        Lane(asia_factory, asia_dc, params.transport_times["short"],
+             params.transport_fixed_costs["short"], params.transport_unit_costs["short"])
+    ]
+
+    for lane in lanes
+        add_lane!(network, lane)
+    end
+
+    # Add demands with parameterized values
+    sales_prices = Dict(
+        "Smart Thermostat" => params.product_prices["Smart Thermostat"] * params.sales_prices_markup,
+        "Security Camera" => params.product_prices["Security Camera"] * params.sales_prices_markup,
+        "Smart Lighting" => params.product_prices["Smart Lighting"] * params.sales_prices_markup
+    )
+
+    lost_sales_costs = Dict(
+        "Smart Thermostat" => params.product_prices["Smart Thermostat"] * params.lost_sales_cost_ratio,
+        "Security Camera" => params.product_prices["Security Camera"] * params.lost_sales_cost_ratio,
+        "Smart Lighting" => params.product_prices["Smart Lighting"] * params.lost_sales_cost_ratio
+    )
+
+    demands = [
+        Demand(eu_market, smart_thermostat, 
+            generate_seasonal_demand(horizon, 
+                base=params.base_demand["Smart Thermostat"],
+                amplitude=params.seasonal_amplitude,
+                trend=params.trend_percentage), 
+            sales_prices["Smart Thermostat"],
+            lost_sales_costs["Smart Thermostat"]),
+        
+        Demand(us_market, security_camera,
+            generate_trending_demand(horizon,
+                base=params.base_demand["Security Camera"],
+                trend=params.trend_percentage,
+                noise_factor=params.noise_factor),
+            sales_prices["Security Camera"],
+            lost_sales_costs["Security Camera"]),
+        
+        Demand(asia_market, smart_lighting,
+            generate_trending_demand(horizon,
+                base=params.base_demand["Smart Lighting"],
+                trend=params.trend_percentage,
+                noise_factor=params.noise_factor),
+            sales_prices["Smart Lighting"],
+            lost_sales_costs["Smart Lighting"])
+    ]
+
+    for demand in demands
+        add_demand!(network, demand)
+    end
+
+    # Parameterized ordering policies
+    policies = Dict()
+    for dc in [europe_dc, namerica_dc, asia_dc]
+        for product in [smart_thermostat, security_camera, smart_lighting]
+            policies[(dc, product)] = SSPolicy(params.reorder_point, params.order_up_to)
+        end
+    end
+
+    # Run simulation
+    final_state = simulate(network, policies)
+
+    # Create output directory if it doesn't exist
+    mkpath(output_dir)
+
+    # Create visualizations
+    p1 = plot_inventory_levels(final_state)
+    p2 = plot_demand_patterns(final_state)
+    p3 = plot_costs_breakdown(final_state)
+    p4 = plot_service_level(final_state)
+    p5, daily_confidence = plot_revenue(final_state)
+    p6 = plot_cumulative_revenue(final_state, daily_confidence)
+    
+    # Save individual plots
+    savefig(p1, joinpath(output_dir, "inventory_levels.png"))
+    savefig(p2, joinpath(output_dir, "demand_patterns.png"))
+    savefig(p3, joinpath(output_dir, "costs_breakdown.png"))
+    savefig(p4, joinpath(output_dir, "service_levels.png"))
+    savefig(p5, joinpath(output_dir, "revenue.png"))
+    savefig(p6, joinpath(output_dir, "cumulative_revenue.png"))
+    
+    # Create and save combined plots
+    combined_plot1 = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
+    combined_plot2 = plot(p5, p6, layout=(2,1), size=(1200,800))
+    
+    savefig(combined_plot1, joinpath(output_dir, "supply_chain_analysis1.png"))
+    savefig(combined_plot2, joinpath(output_dir, "supply_chain_analysis2.png"))
+    
+    display(combined_plot1)
+    display(combined_plot2)
+    
+    return final_state
+end 
