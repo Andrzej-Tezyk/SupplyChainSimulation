@@ -1,46 +1,83 @@
-# Firma: SmartHome Innovations  
+# SmartHome Innovations: Supply Chain Network Analysis
 
-**Opis firmy:**                                  
-SmartHome Innovations to globalny dostawca zaawansowanych technologii i systemów automatyki domowej, specjalizujący się w produkcji inteligentnych urządzeń do zarządzania domem, takich jak systemy oświetleniowe, termostaty, zamki do drzwi, urządzenia monitorujące bezpieczeństwo, oraz sprzęt audio-wideo. Firma obsługuje zarówno rynek B2C (klienci indywidualni), jak i B2B (współpraca z firmami budowlanymi i deweloperami).
+## Company Overview
+SmartHome Innovations is a global provider of smart home technologies, specializing in:
+- Smart Thermostats
+- Security Cameras
+- Smart Lighting Systems
 
-**Struktura firmy:**                                                
-Producent (Produkcja i Montaż):
+## Network Structure
 
-**Zakłady produkcyjne:**                                                                      
-Ameryka Północna (USA) -> Produkcja komponentów elektronicznych (czujników, kamer, urządzeń sterujących), z wykorzystaniem nowoczesnych technologii IoT.
-Azja (Chiny, Tajwan) -> Produkcja urządzeń audio-wideo i systemów inteligentnego oświetlenia, w tym montaż finalny.
-Procesy produkcyjne -> Firma posiada zautomatyzowane linie produkcyjne, które zapewniają wysoką jakość i precyzję w produkcji, ale również możliwość dostosowania do dynamicznie zmieniających się potrzeb rynkowych. Produkcja oparta jest na metodzie just-in-time, co wymaga elastycznego zarządzania zapasami.
+### Manufacturing Facilities
+- **North America (USA)**
+  - Production of electronic components
+  - IoT technology integration
+- **Asia (China)**
+  - Audio-video equipment production
+  - Smart lighting systems assembly
 
-**Dystrybutorzy (Magazyny i Centra Logistyczne):**                                
-*Trzy główne centra dystrybucyjne:*                               
-Europa (Niemcy) -> Centrum logistyczne obsługujące rynki niemiecki, francuski, włoski i inne kraje UE.
-Ameryka Północna (Kanada/USA) -> Centrum dystrybucyjne obsługujące rynek północnoamerykański, w tym duże zapotrzebowanie na systemy bezpieczeństwa i oświetlenia.
-Azja-Pacyfik (Singapur) -> Centrum dystrybucyjne dla krajów Azji, Australii i Nowej Zelandii, z uwzględnieniem specyficznych potrzeb regionu (np. systemy oświetlenia zasilane z sieci 220V).
-Funkcja dystrybucji -> Centra pełnią rolę regionalnych hubów logistycznych, z których produkty trafiają do sklepów detalicznych, sklepów internetowych oraz bezpośrednio do deweloperów, którzy montują systemy w nowych budynkach.
+### Distribution Centers
+- **Europe (Germany)**
+  - Serving German, French, Italian, and other EU markets
+- **North America (USA/Canada)**
+  - Serving North American market
+  - Focus on security systems and lighting
+- **Asia-Pacific (Singapore)**
+  - Serving Asian, Australian, and New Zealand markets
+  - Region-specific voltage adaptation (220V systems)
 
-**Rynki (Popyt Klientów):**                                   
-Sprzedaż detaliczna i online -> Produkty SmartHome Innovations dostępne są zarówno w sklepach stacjonarnych, jak i w sklepach internetowych, a także przez autoryzowanych dealerów.
-Popyt zależny od innowacji -> Na rynku obserwuje się wzrost zapotrzebowania na nowe technologie, takie jak integracja z asystentami głosowymi (np. Alexa, Google Assistant), co wpływa na zmiany popytu.
+## Supply Chain Characteristics
 
-**Segmenty rynku:**                                      
-*Firma oferuje produkty dla różnych grup klientów:*                                    
-Indywidualni klienci -> Kupują urządzenia do użytku domowego, np. inteligentne termostaty czy systemy alarmowe.
-B2B: Deweloperzy i firmy budowlane zamawiają pakiety urządzeń do nowych budynków mieszkalnych i komercyjnych.
-Dlaczego SmartHome Innovations nadaje się do projektu?
+### Production Process
+- Automated production lines
+- Just-in-time manufacturing
+- Quality control integration
+- Flexible capacity adjustment
 
-**Elastyczna struktura węzłów sieci:**                                                          
-Firma posiada zróżnicowaną sieć dostaw z producentami, magazynami dystrybucyjnymi oraz punktami sprzedaży, co doskonale wpisuje się w założenia projektu.
+### Distribution
+- Regional logistics hubs
+- Multi-channel distribution
+  - Retail stores
+  - Online sales
+  - Direct to developers
 
-**Zmienność w czasie dostaw:**                                 
-Czasy dostaw mogą się zmieniać w zależności od sezonowości, na przykład przed okresem świątecznym, kiedy popyt na produkty wzrasta, lub w zależności od innowacji rynkowych, gdy pojawiają się nowe, popularne technologie. Zakłócenia w dostawach komponentów elektronicznych (np. półprzewodników) również mogą wpłynąć na produkcję.
+### Market Segments
+- **B2C**: Individual homeowners
+- **B2B**: Construction companies and developers
 
-**Integracja z ReinforcementLearning.jl:**                                     
-Agenci RL mogą optymalizować procesy zamówień w centrach dystrybucyjnych i monitorować zapotrzebowanie klientów, przewidując popyt na poszczególne urządzenia w różnych okresach roku, a także podejmować decyzje o przechowywaniu zapasów w zależności od zmieniających się warunków rynkowych.
+## Simulation Features
 
-**Analiza wrażliwości:**                                                                   
-*Firma może przeprowadzać analizy wrażliwości na zmiany w różnych aspektach sieci dostaw, takich jak:*                           
+### Network Flexibility
+- Dynamic inventory management
+- Variable delivery times
+- Multiple transportation routes
+- Regional demand variations
 
-Fluktuacje popytu na poszczególne produkty w zależności od sezonu (np. letnia sprzedaż systemów chłodzenia, zimowa – systemów ogrzewania).
-Zakłócenia w łańcuchu dostaw komponentów, jak chipów czy czujników, które mogą wpłynąć na produkcję urządzeń.
-Zmiany w strategii dystrybucji (np. optymalizacja magazynów w zależności od lokalizacji klientów).
-SmartHome Innovations jest idealnym przykładem firmy, która może korzystać z elastycznych i dynamicznych systemów dostaw, a także wykorzystywać metody sztucznej inteligencji do optymalizacji swoich procesów, zarządzania zapasami i reagowania na zmiany w popycie.
+### Analysis Capabilities
+- Inventory level optimization
+- Demand pattern analysis
+- Cost structure evaluation
+- Service level monitoring
+- Revenue tracking with confidence intervals
+
+### Sensitivity Analysis
+The simulation includes comprehensive sensitivity analysis for:
+- Product pricing and costs
+- Inventory management parameters
+- Ordering policies
+- Transportation network efficiency
+- Demand patterns and variability
+
+### Performance Metrics
+- Service levels
+- Cost efficiency
+- Revenue generation
+- Inventory turnover
+- Transportation efficiency
+
+## Implementation
+The simulation is implemented in Julia, providing:
+- Flexible parameter configuration
+- Comprehensive visualization
+- Statistical analysis
+- Multiple scenario comparison
