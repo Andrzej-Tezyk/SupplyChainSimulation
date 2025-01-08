@@ -580,12 +580,12 @@ function default_parameters()
 end
 
 # Create parameter variations for each set
-function get_product_parameters_higher()
+function get_product_parameters_positive()
     base = default_parameters()
     return SimulationParameters(
         Dict("Smart Thermostat" => 300.0, "Security Camera" => 225.0, "Smart Lighting" => 150.0),  # 50% higher
-        2.0,  # Higher markup (100% vs 50%)
-        0.15, # Higher lost sales cost ratio
+        1.75,  # Higher markup (75% vs 50%)
+        0.05, # Lower lost sales cost ratio
         base.initial_inventory,
         base.holding_cost_rates,
         base.reorder_point,
@@ -600,12 +600,12 @@ function get_product_parameters_higher()
     )
 end
 
-function get_product_parameters_lower()
+function get_product_parameters_negative()
     base = default_parameters()
     return SimulationParameters(
         Dict("Smart Thermostat" => 100.0, "Security Camera" => 75.0, "Smart Lighting" => 50.0),  # 50% lower
         1.25,  # Lower markup (25% vs 50%)
-        0.05,  # Lower lost sales cost ratio
+        0.15,  # Higher lost sales cost ratio
         base.initial_inventory,
         base.holding_cost_rates,
         base.reorder_point,
@@ -620,14 +620,14 @@ function get_product_parameters_lower()
     )
 end
 
-function get_inventory_parameters_higher()
+function get_inventory_parameters_positive()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
         base.sales_prices_markup,
         base.lost_sales_cost_ratio,
         200.0,  # Double initial inventory
-        Dict("Smart Thermostat" => 0.75, "Security Camera" => 1.05, "Smart Lighting" => 0.45),  # 50% higher
+        Dict("Smart Thermostat" => 0.25, "Security Camera" => 0.35, "Smart Lighting" => 0.45),  # 50% lower
         base.reorder_point,
         base.order_up_to,
         base.transport_fixed_costs,
@@ -640,14 +640,14 @@ function get_inventory_parameters_higher()
     )
 end
 
-function get_inventory_parameters_lower()
+function get_inventory_parameters_negative()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
         base.sales_prices_markup,
         base.lost_sales_cost_ratio,
         50.0,  # Half initial inventory
-        Dict("Smart Thermostat" => 0.25, "Security Camera" => 0.35, "Smart Lighting" => 0.15),  # 50% lower
+        Dict("Smart Thermostat" => 0.75, "Security Camera" => 1.05, "Smart Lighting" => 0.15),  # 50% higher
         base.reorder_point,
         base.order_up_to,
         base.transport_fixed_costs,
@@ -660,7 +660,7 @@ function get_inventory_parameters_lower()
     )
 end
 
-function get_ordering_parameters_higher()
+function get_ordering_parameters_positive()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
@@ -680,7 +680,7 @@ function get_ordering_parameters_higher()
     )
 end
 
-function get_ordering_parameters_lower()
+function get_ordering_parameters_negative()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
@@ -688,7 +688,7 @@ function get_ordering_parameters_lower()
         base.lost_sales_cost_ratio,
         base.initial_inventory,
         base.holding_cost_rates,
-        25.0,   # 50% lower reorder point
+        30.0,   # 50% lower reorder point
         100.0,  # 50% lower order up to
         base.transport_fixed_costs,
         base.transport_unit_costs,
@@ -700,27 +700,7 @@ function get_ordering_parameters_lower()
     )
 end
 
-function get_transport_parameters_higher()
-    base = default_parameters()
-    return SimulationParameters(
-        base.product_prices,
-        base.sales_prices_markup,
-        base.lost_sales_cost_ratio,
-        base.initial_inventory,
-        base.holding_cost_rates,
-        base.reorder_point,
-        base.order_up_to,
-        Dict("short" => 1500.0, "medium" => 3000.0, "long" => 3750.0),  # 50% higher
-        Dict("short" => 15.0, "medium" => 30.0, "long" => 37.5),  # 50% higher
-        Dict("short" => 7, "medium" => 22, "long" => 30),  # 40% longer
-        base.base_demand,
-        base.seasonal_amplitude,
-        base.trend_percentage,
-        base.noise_factor
-    )
-end
-
-function get_transport_parameters_lower()
+function get_transport_parameters_positive()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
@@ -740,7 +720,27 @@ function get_transport_parameters_lower()
     )
 end
 
-function get_demand_parameters_higher()
+function get_transport_parameters_negative()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        Dict("short" => 1500.0, "medium" => 3000.0, "long" => 3750.0),  # 50% higher
+        Dict("short" => 15.0, "medium" => 30.0, "long" => 37.5),  # 50% higher
+        Dict("short" => 7, "medium" => 22, "long" => 30),  # 40% longer
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+function get_demand_parameters_positive()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
@@ -754,13 +754,13 @@ function get_demand_parameters_higher()
         base.transport_unit_costs,
         base.transport_times,
         Dict("Smart Thermostat" => 90.0, "Security Camera" => 75.0, "Smart Lighting" => 105.0),  # 50% higher
-        30.0,   # 50% higher seasonal amplitude
+        base.seasonal_amplitude,
         15.0,   # 50% higher trend
-        0.15    # 50% higher noise
+        base.noise_factor
     )
 end
 
-function get_demand_parameters_lower()
+function get_demand_parameters_negative()
     base = default_parameters()
     return SimulationParameters(
         base.product_prices,
@@ -774,41 +774,11 @@ function get_demand_parameters_lower()
         base.transport_unit_costs,
         base.transport_times,
         Dict("Smart Thermostat" => 30.0, "Security Camera" => 25.0, "Smart Lighting" => 35.0),  # 50% lower
-        10.0,   # 50% lower seasonal amplitude
+        base.seasonal_amplitude,
         5.0,    # 50% lower trend
-        0.05    # 50% lower noise
+        base.noise_factor
     )
 end
-
-# Run all sensitivity analyses
-function run_all_sensitivity_analyses()
-    # Create base case
-    println("Running base case simulation...")
-    run_simulation(default_parameters(), "./plots/base")
-    
-    # Run sensitivity analyses
-    sensitivity_cases = [
-        ("product_higher", get_product_parameters_higher()),
-        ("product_lower", get_product_parameters_lower()),
-        ("inventory_higher", get_inventory_parameters_higher()),
-        ("inventory_lower", get_inventory_parameters_lower()),
-        ("ordering_higher", get_ordering_parameters_higher()),
-        ("ordering_lower", get_ordering_parameters_lower()),
-        ("transport_higher", get_transport_parameters_higher()),
-        ("transport_lower", get_transport_parameters_lower()),
-        ("demand_higher", get_demand_parameters_higher()),
-        ("demand_lower", get_demand_parameters_lower())
-    ]
-    
-    for (case_name, params) in sensitivity_cases
-        println("Running sensitivity analysis for: ", case_name)
-        output_dir = "./plots/sens/$case_name"
-        run_simulation(params, output_dir)
-    end
-end
-
-# Run all analyses
-run_all_sensitivity_analyses() 
 
 # Modified run_simulation function
 function run_simulation(params::SimulationParameters=default_parameters(), output_dir::String="./plots/base")
@@ -977,3 +947,33 @@ function run_simulation(params::SimulationParameters=default_parameters(), outpu
     
     return final_state
 end 
+
+# Run all sensitivity analyses
+function run_all_sensitivity_analyses()
+    # Create base case
+    println("Running base case simulation...")
+    run_simulation(default_parameters(), "./plots/base")
+    
+    # Run sensitivity analyses
+    sensitivity_cases = [
+        ("product_positive", get_product_parameters_positive()),
+        ("product_negative", get_product_parameters_negative()),
+        ("inventory_positive", get_inventory_parameters_positive()),
+        ("inventory_negative", get_inventory_parameters_negative()),
+        ("ordering_positive", get_ordering_parameters_positive()),
+        ("ordering_negative", get_ordering_parameters_negative()),
+        ("transport_positive", get_transport_parameters_positive()),
+        ("transport_negative", get_transport_parameters_negative()),
+        ("demand_positive", get_demand_parameters_positive()),
+        ("demand_negative", get_demand_parameters_negative())
+    ]
+    
+    for (case_name, params) in sensitivity_cases
+        println("Running sensitivity analysis for: ", case_name)
+        output_dir = "./plots/sens/$case_name"
+        run_simulation(params, output_dir)
+    end
+end
+
+# Run all analyses
+run_all_sensitivity_analyses() 
