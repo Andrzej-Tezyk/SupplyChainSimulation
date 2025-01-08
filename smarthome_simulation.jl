@@ -302,7 +302,16 @@ function plot_inventory_levels(state::SimulationState)
         title="Inventory Levels Over Time",
         xlabel="Time (days)",
         ylabel="Inventory Level",
-        legend=:topright
+        legend=:outerright,
+        size=(1800, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        legendfont=font(12),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=80Plots.mm
     )
     
     colors = [:blue, :red, :green]
@@ -313,9 +322,10 @@ function plot_inventory_levels(state::SimulationState)
             if haskey(state.inventory_history, (storage, product))
                 history = state.inventory_history[(storage, product)]
                 plot!(p, 1:length(history), history,
-                    label="$(storage.name) - $(product.name)",
+                    label="$(storage.name)\n$(product.name)",
                     color=colors[i],
-                    linestyle=styles[j])
+                    linestyle=styles[j],
+                    linewidth=4)
             end
         end
     end
@@ -328,12 +338,22 @@ function plot_demand_patterns(state::SimulationState)
         title="Demand Patterns",
         xlabel="Time (days)",
         ylabel="Demand Quantity",
-        legend=:topright
+        legend=:outerright,
+        size=(1800, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        legendfont=font(12),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=80Plots.mm
     )
     
     for demand in state.network.demands
         plot!(p, 1:state.network.horizon, demand.quantities,
-            label="$(demand.customer.region) - $(demand.product.name)")
+            label="$(demand.customer.region)\n$(demand.product.name)",
+            linewidth=4)
     end
     
     return p
@@ -454,7 +474,16 @@ function plot_revenue(state::SimulationState)
         title="Daily Revenue Over Time",
         xlabel="Time (days)",
         ylabel="Daily Revenue (\$)",
-        legend=true
+        legend=:topright,
+        size=(1200, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        legendfont=font(14),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=20Plots.mm
     )
     
     # Plot main line with confidence intervals
@@ -510,7 +539,16 @@ function plot_cumulative_revenue(state::SimulationState, daily_confidence::Vecto
         title="Cumulative Revenue Over Time",
         xlabel="Time (days)",
         ylabel="Cumulative Revenue (\$)",
-        legend=true
+        legend=:bottomright,
+        size=(1200, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        legendfont=font(14),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=20Plots.mm
     )
     
     # Plot main line with confidence intervals
@@ -563,7 +601,7 @@ function default_parameters()
         Dict("Smart Thermostat" => 0.5, "Security Camera" => 0.7, "Smart Lighting" => 0.3),
         
         # Ordering parameters
-        50.0,   # Reorder point
+        75.0,   # Reorder point
         200.0,  # Order up to level
         
         # Transportation parameters
@@ -668,7 +706,7 @@ function get_ordering_parameters_positive()
         base.lost_sales_cost_ratio,
         base.initial_inventory,
         base.holding_cost_rates,
-        75.0,   # 50% higher reorder point
+        100.0,   # 50% higher reorder point
         300.0,  # 50% higher order up to
         base.transport_fixed_costs,
         base.transport_unit_costs,
@@ -688,7 +726,7 @@ function get_ordering_parameters_negative()
         base.lost_sales_cost_ratio,
         base.initial_inventory,
         base.holding_cost_rates,
-        30.0,   # 50% lower reorder point
+        50.0,   # 50% lower reorder point
         100.0,  # 50% lower order up to
         base.transport_fixed_costs,
         base.transport_unit_costs,
@@ -935,9 +973,24 @@ function run_simulation(params::SimulationParameters=default_parameters(), outpu
     savefig(p5, joinpath(output_dir, "revenue.png"))
     savefig(p6, joinpath(output_dir, "cumulative_revenue.png"))
     
-    # Create and save combined plots
-    combined_plot1 = plot(p1, p2, p3, p4, layout=(2,2), size=(1200,800))
-    combined_plot2 = plot(p5, p6, layout=(2,1), size=(1200,800))
+    # Create and save combined plots with adjusted sizes
+    combined_plot1 = plot(p1, p2, p3, p4, 
+        layout=(2,2), 
+        size=(3200, 1600),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=80Plots.mm
+    )
+    
+    combined_plot2 = plot(p5, p6, 
+        layout=(2,1), 
+        size=(3200, 1600),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=80Plots.mm
+    )
     
     savefig(combined_plot1, joinpath(output_dir, "supply_chain_analysis1.png"))
     savefig(combined_plot2, joinpath(output_dir, "supply_chain_analysis2.png"))
