@@ -393,12 +393,27 @@ function plot_costs_breakdown(state::SimulationState)
     # Create bar plot for costs
     costs_data = [holding_costs, lost_sales_costs, transportation_costs]
     
-    p = bar(["Holding Costs", "Lost Sales Costs", "Transportation Costs"],
+    p = bar(["Holding\nCosts", "Lost Sales\nCosts", "Transportation\nCosts"],
         costs_data,
         title="Cost Breakdown",
         ylabel="Cost (\$)",
         legend=false,
-        rotation=45)
+        rotation=0,
+        size=(1200, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=20Plots.mm,
+        formatter=:plain,
+        yformatter=y->string("\$", Int(round(y)))
+    )
+    
+    # Add value labels on top of bars
+    annotate!([(i, costs_data[i], text(string("\$", round(Int, costs_data[i])), 14, :bottom)) 
+               for i in 1:length(costs_data)])
     
     return p
 end
@@ -429,17 +444,29 @@ function plot_service_level(state::SimulationState)
         end
     end
     
-    # Create bar plot
-    p = bar(labels,
-        service_levels,
-        title="Percentage of Demand Fulfilled by Market and Product",
-        ylabel="Percentage of Demand (%)",
-        legend=false,
-        rotation=45)
+    # Format labels to use line breaks instead of long strings
+    formatted_labels = [replace(label, " - " => "\n") for label in labels]
     
-    # Add value labels
-    annotate!(p, [(i, v + maximum(service_levels)*0.02, 
-        text("$(round(v, digits=1))%", 8)) for (i, v) in enumerate(service_levels)])
+    p = bar(formatted_labels,
+        service_levels,
+        title="Service Levels by Market and Product",
+        ylabel="Service Level (%)",
+        legend=false,
+        rotation=45,
+        size=(1200, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        margin=20Plots.mm,
+        bottom_margin=35Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=20Plots.mm,
+        title_location=:center
+    )
+    
+    # Add value labels on top of bars
+    annotate!([(i, v + 1, text("$(round(v, digits=1))%", 14, :bottom)) 
+               for (i, v) in enumerate(service_levels)])
     
     return p
 end
@@ -1055,14 +1082,17 @@ function run_simulation(params::SimulationParameters=default_parameters(), outpu
     savefig(p5, joinpath(output_dir, "revenue.png"))
     savefig(p6, joinpath(output_dir, "cumulative_revenue.png"))
     
-    # Create and save combined plots with adjusted sizes
+    # Create and save combined plots with adjusted sizes and margins
     combined_plot1 = plot(p1, p2, p3, p4, 
         layout=(2,2), 
         size=(3200, 1600),
         margin=20Plots.mm,
-        bottom_margin=15Plots.mm,
+        bottom_margin=35Plots.mm,
         left_margin=15Plots.mm,
-        right_margin=80Plots.mm
+        right_margin=80Plots.mm,
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14)
     )
     
     combined_plot2 = plot(p5, p6, 
