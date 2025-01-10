@@ -819,6 +819,87 @@ function get_demand_parameters_negative()
     )
 end
 
+# Case 1: Price increase impact
+function get_price_increase_parameters()
+    base = default_parameters()
+    return SimulationParameters(
+        # Increase product prices by 50%
+        Dict("Smart Thermostat" => base.product_prices["Smart Thermostat"] * 1.5,
+             "Security Camera" => base.product_prices["Security Camera"] * 1.5,
+             "Smart Lighting" => base.product_prices["Smart Lighting"] * 1.5),
+        2.0,  # Increased markup from 1.5 to 2.0 (100% instead of 50%)
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        # Decrease base demand by 30%
+        Dict("Smart Thermostat" => base.base_demand["Smart Thermostat"] * 0.7,
+             "Security Camera" => base.base_demand["Security Camera"] * 0.7,
+             "Smart Lighting" => base.base_demand["Smart Lighting"] * 0.7),
+        base.seasonal_amplitude,
+        5.0,    # Decreased trend from 10.0 to 5.0
+        base.noise_factor
+    )
+end
+
+# Case 2: Infrastructure investment impact
+function get_infrastructure_investment_parameters()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        # Decrease holding costs by 50%
+        Dict("Smart Thermostat" => base.holding_cost_rates["Smart Thermostat"] * 0.5,
+             "Security Camera" => base.holding_cost_rates["Security Camera"] * 0.5,
+             "Smart Lighting" => base.holding_cost_rates["Smart Lighting"] * 0.5),
+        base.reorder_point,
+        base.order_up_to,
+        # Decrease transport fixed costs by 40%
+        Dict("short" => base.transport_fixed_costs["short"] * 0.6,
+             "medium" => base.transport_fixed_costs["medium"] * 0.6,
+             "long" => base.transport_fixed_costs["long"] * 0.6),
+        # Decrease transport unit costs by 40%
+        Dict("short" => base.transport_unit_costs["short"] * 0.6,
+             "medium" => base.transport_unit_costs["medium"] * 0.6,
+             "long" => base.transport_unit_costs["long"] * 0.6),
+        # Decrease transport times by 30%
+        Dict("short" => max(1, floor(Int, base.transport_times["short"] * 0.7)),
+             "medium" => max(1, floor(Int, base.transport_times["medium"] * 0.7)),
+             "long" => max(1, floor(Int, base.transport_times["long"] * 0.7))),
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+# Case 3: Market pressure scenario
+function get_market_pressure_parameters()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        1.0,    # No markup (sales price = product price)
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        -5.0,   # Negative trend (5% decrease per year)
+        base.noise_factor
+    )
+end
+
 # Modified run_simulation function
 function run_simulation(params::SimulationParameters=default_parameters(), output_dir::String="./plots/base")
     # Create products with parameterized prices
@@ -1019,7 +1100,11 @@ function run_all_sensitivity_analyses()
         ("transport_positive", get_transport_parameters_positive()),
         ("transport_negative", get_transport_parameters_negative()),
         ("demand_positive", get_demand_parameters_positive()),
-        ("demand_negative", get_demand_parameters_negative())
+        ("demand_negative", get_demand_parameters_negative()),
+        # Add new comprehensive cases
+        ("price_increase", get_price_increase_parameters()),
+        ("infrastructure_investment", get_infrastructure_investment_parameters()),
+        ("market_pressure", get_market_pressure_parameters())
     ]
     
     for (case_name, params) in sensitivity_cases
