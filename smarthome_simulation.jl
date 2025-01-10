@@ -483,15 +483,16 @@ function plot_revenue(state::SimulationState)
         margin=20Plots.mm,
         bottom_margin=15Plots.mm,
         left_margin=15Plots.mm,
-        right_margin=20Plots.mm
+        right_margin=20Plots.mm,
+        formatter=:plain,  # Use plain number formatting instead of scientific notation
+        yformatter=y->string("\$", Int(round(y)))  # Format y-axis labels as currency
     )
     
-    # Plot main line with confidence intervals
     plot!(p, 1:length(daily_revenue), daily_revenue, 
         ribbon=daily_confidence,
         label="Daily Revenue with 95% CI",
         color=:blue,
-        linewidth=2,
+        linewidth=4,
         fillalpha=0.3)
     
     return p, daily_confidence
