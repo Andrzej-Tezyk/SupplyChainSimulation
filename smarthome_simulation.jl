@@ -299,9 +299,9 @@ end
 
 function plot_inventory_levels(state::SimulationState)
     p = plot(
-        title="Inventory Levels Over Time",
+        title="Changes in Warehouse Stock Levels Over Time",
         xlabel="Time (days)",
-        ylabel="Inventory Level",
+        ylabel="Warehouse Stock Levels",
         legend=:outerright,
         size=(1800, 600),
         titlefont=font(20),
