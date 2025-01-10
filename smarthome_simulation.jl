@@ -432,8 +432,8 @@ function plot_service_level(state::SimulationState)
     # Create bar plot
     p = bar(labels,
         service_levels,
-        title="Service Levels by Market and Product",
-        ylabel="Service Level (%)",
+        title="Percentage of Demand Fulfilled by Market and Product",
+        ylabel="Percentage of Demand (%)",
         legend=false,
         rotation=45)
     
