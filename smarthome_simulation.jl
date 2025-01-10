@@ -299,9 +299,9 @@ end
 
 function plot_inventory_levels(state::SimulationState)
     p = plot(
-        title="Inventory Levels Over Time",
+        title="Changes in Warehouse Stock Levels Over Time",
         xlabel="Time (days)",
-        ylabel="Inventory Level",
+        ylabel="Warehouse Stock Levels",
         legend=:outerright,
         size=(1800, 600),
         titlefont=font(20),
@@ -393,12 +393,27 @@ function plot_costs_breakdown(state::SimulationState)
     # Create bar plot for costs
     costs_data = [holding_costs, lost_sales_costs, transportation_costs]
     
-    p = bar(["Holding Costs", "Lost Sales Costs", "Transportation Costs"],
+    p = bar(["Holding\nCosts", "Lost Sales\nCosts", "Transportation\nCosts"],
         costs_data,
         title="Cost Breakdown",
         ylabel="Cost (\$)",
         legend=false,
-        rotation=45)
+        rotation=0,
+        size=(1200, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        margin=20Plots.mm,
+        bottom_margin=15Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=20Plots.mm,
+        formatter=:plain,
+        yformatter=y->string("\$", Int(round(y)))
+    )
+    
+    # Add value labels on top of bars
+    annotate!([(i, costs_data[i], text(string("\$", round(Int, costs_data[i])), 14, :bottom)) 
+               for i in 1:length(costs_data)])
     
     return p
 end
@@ -429,17 +444,29 @@ function plot_service_level(state::SimulationState)
         end
     end
     
-    # Create bar plot
-    p = bar(labels,
+    # Format labels to use line breaks instead of long strings
+    formatted_labels = [replace(label, " - " => "\n") for label in labels]
+    
+    p = bar(formatted_labels,
         service_levels,
         title="Service Levels by Market and Product",
         ylabel="Service Level (%)",
         legend=false,
-        rotation=45)
+        rotation=45,
+        size=(1200, 600),
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14),
+        margin=20Plots.mm,
+        bottom_margin=35Plots.mm,
+        left_margin=15Plots.mm,
+        right_margin=20Plots.mm,
+        title_location=:center
+    )
     
-    # Add value labels
-    annotate!(p, [(i, v + maximum(service_levels)*0.02, 
-        text("$(round(v, digits=1))%", 8)) for (i, v) in enumerate(service_levels)])
+    # Add value labels on top of bars
+    annotate!([(i, v + 1, text("$(round(v, digits=1))%", 14, :bottom)) 
+               for (i, v) in enumerate(service_levels)])
     
     return p
 end
@@ -483,15 +510,16 @@ function plot_revenue(state::SimulationState)
         margin=20Plots.mm,
         bottom_margin=15Plots.mm,
         left_margin=15Plots.mm,
-        right_margin=20Plots.mm
+        right_margin=20Plots.mm,
+        formatter=:plain,  # Use plain number formatting instead of scientific notation
+        yformatter=y->string("\$", Int(round(y)))  # Format y-axis labels as currency
     )
     
-    # Plot main line with confidence intervals
     plot!(p, 1:length(daily_revenue), daily_revenue, 
         ribbon=daily_confidence,
         label="Daily Revenue with 95% CI",
         color=:blue,
-        linewidth=2,
+        linewidth=4,
         fillalpha=0.3)
     
     return p, daily_confidence
@@ -818,6 +846,87 @@ function get_demand_parameters_negative()
     )
 end
 
+# Case 1: Price increase impact
+function get_price_increase_parameters()
+    base = default_parameters()
+    return SimulationParameters(
+        # Increase product prices by 50%
+        Dict("Smart Thermostat" => base.product_prices["Smart Thermostat"] * 1.5,
+             "Security Camera" => base.product_prices["Security Camera"] * 1.5,
+             "Smart Lighting" => base.product_prices["Smart Lighting"] * 1.5),
+        2.0,  # Increased markup from 1.5 to 2.0 (100% instead of 50%)
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        # Decrease base demand by 30%
+        Dict("Smart Thermostat" => base.base_demand["Smart Thermostat"] * 0.7,
+             "Security Camera" => base.base_demand["Security Camera"] * 0.7,
+             "Smart Lighting" => base.base_demand["Smart Lighting"] * 0.7),
+        base.seasonal_amplitude,
+        5.0,    # Decreased trend from 10.0 to 5.0
+        base.noise_factor
+    )
+end
+
+# Case 2: Infrastructure investment impact
+function get_infrastructure_investment_parameters()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        base.sales_prices_markup,
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        # Decrease holding costs by 50%
+        Dict("Smart Thermostat" => base.holding_cost_rates["Smart Thermostat"] * 0.5,
+             "Security Camera" => base.holding_cost_rates["Security Camera"] * 0.5,
+             "Smart Lighting" => base.holding_cost_rates["Smart Lighting"] * 0.5),
+        base.reorder_point,
+        base.order_up_to,
+        # Decrease transport fixed costs by 40%
+        Dict("short" => base.transport_fixed_costs["short"] * 0.6,
+             "medium" => base.transport_fixed_costs["medium"] * 0.6,
+             "long" => base.transport_fixed_costs["long"] * 0.6),
+        # Decrease transport unit costs by 40%
+        Dict("short" => base.transport_unit_costs["short"] * 0.6,
+             "medium" => base.transport_unit_costs["medium"] * 0.6,
+             "long" => base.transport_unit_costs["long"] * 0.6),
+        # Decrease transport times by 30%
+        Dict("short" => max(1, floor(Int, base.transport_times["short"] * 0.7)),
+             "medium" => max(1, floor(Int, base.transport_times["medium"] * 0.7)),
+             "long" => max(1, floor(Int, base.transport_times["long"] * 0.7))),
+        base.base_demand,
+        base.seasonal_amplitude,
+        base.trend_percentage,
+        base.noise_factor
+    )
+end
+
+# Case 3: Market pressure scenario
+function get_market_pressure_parameters()
+    base = default_parameters()
+    return SimulationParameters(
+        base.product_prices,
+        1.0,    # No markup (sales price = product price)
+        base.lost_sales_cost_ratio,
+        base.initial_inventory,
+        base.holding_cost_rates,
+        base.reorder_point,
+        base.order_up_to,
+        base.transport_fixed_costs,
+        base.transport_unit_costs,
+        base.transport_times,
+        base.base_demand,
+        base.seasonal_amplitude,
+        -5.0,   # Negative trend (5% decrease per year)
+        base.noise_factor
+    )
+end
+
 # Modified run_simulation function
 function run_simulation(params::SimulationParameters=default_parameters(), output_dir::String="./plots/base")
     # Create products with parameterized prices
@@ -973,14 +1082,17 @@ function run_simulation(params::SimulationParameters=default_parameters(), outpu
     savefig(p5, joinpath(output_dir, "revenue.png"))
     savefig(p6, joinpath(output_dir, "cumulative_revenue.png"))
     
-    # Create and save combined plots with adjusted sizes
+    # Create and save combined plots with adjusted sizes and margins
     combined_plot1 = plot(p1, p2, p3, p4, 
         layout=(2,2), 
         size=(3200, 1600),
         margin=20Plots.mm,
-        bottom_margin=15Plots.mm,
+        bottom_margin=35Plots.mm,
         left_margin=15Plots.mm,
-        right_margin=80Plots.mm
+        right_margin=80Plots.mm,
+        titlefont=font(20),
+        guidefont=font(16),
+        tickfont=font(14)
     )
     
     combined_plot2 = plot(p5, p6, 
@@ -1018,7 +1130,11 @@ function run_all_sensitivity_analyses()
         ("transport_positive", get_transport_parameters_positive()),
         ("transport_negative", get_transport_parameters_negative()),
         ("demand_positive", get_demand_parameters_positive()),
-        ("demand_negative", get_demand_parameters_negative())
+        ("demand_negative", get_demand_parameters_negative()),
+        # Add new comprehensive cases
+        ("price_increase", get_price_increase_parameters()),
+        ("infrastructure_investment", get_infrastructure_investment_parameters()),
+        ("market_pressure", get_market_pressure_parameters())
     ]
     
     for (case_name, params) in sensitivity_cases
