@@ -910,9 +910,12 @@ end
 function get_market_pressure_parameters()
     base = default_parameters()
     return SimulationParameters(
-        base.product_prices,
-        1.0,    # No markup (sales price = product price)
-        base.lost_sales_cost_ratio,
+        # Reduce base prices by 30%
+        Dict("Smart Thermostat" => base.product_prices["Smart Thermostat"] * 0.7,
+             "Security Camera" => base.product_prices["Security Camera"] * 0.7,
+             "Smart Lighting" => base.product_prices["Smart Lighting"] * 0.7),
+        1.15,    # 15% markup (reduced from 50%)
+        0.2,     # Increased lost sales cost ratio (from 0.1 to 0.2)
         base.initial_inventory,
         base.holding_cost_rates,
         base.reorder_point,
@@ -920,7 +923,10 @@ function get_market_pressure_parameters()
         base.transport_fixed_costs,
         base.transport_unit_costs,
         base.transport_times,
-        base.base_demand,
+        # Reduce base demand by 35%
+        Dict("Smart Thermostat" => base.base_demand["Smart Thermostat"] * 0.65,
+             "Security Camera" => base.base_demand["Security Camera"] * 0.65,
+             "Smart Lighting" => base.base_demand["Smart Lighting"] * 0.65),
         base.seasonal_amplitude,
         -5.0,   # Negative trend (5% decrease per year)
         base.noise_factor
